@@ -1,6 +1,7 @@
 #!/bin/sh
-# Builds the mod and assembles dist/overlay/: BepInEx 5 for Linux plus our
-# plugin, laid out to be copied straight into the Liftoff install folder.
+# Builds the mod and assembles dist/overlay/: BepInEx 5 for Linux, our plugin
+# and the maps in dist/maps/, laid out to be copied straight into the Liftoff
+# install folder.
 #
 #   scripts/package.sh            # needs the .NET 8 SDK and game/Managed
 set -e
@@ -24,4 +25,8 @@ python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall('dist/ov
 chmod +x dist/overlay/run_bepinex.sh
 cp mod/LiftoffImport/bin/Release/net472/LiftoffImport.dll dist/overlay/BepInEx/plugins/LiftoffImport/
 cp -r mod/overlay/. dist/overlay/
+# converted maps (tools/convert_scan.py), if any
+if [ -d dist/maps ]; then
+  cp -r dist/maps dist/overlay/BepInEx/plugins/LiftoffImport/
+fi
 echo "dist/overlay ready"

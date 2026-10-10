@@ -25,5 +25,9 @@
     <Reference Include="UnityEngine.PhysicsModule" HintPath="$(GameManaged)/UnityEngine.PhysicsModule.dll" Private="false" />
     <Reference Include="UnityEngine.InputLegacyModule" HintPath="$(GameManaged)/UnityEngine.InputLegacyModule.dll" Private="false" />
     <Reference Include="UnityEngine.TerrainModule" HintPath="$(GameManaged)/UnityEngine.TerrainModule.dll" Private="false" />
+    <Reference Include="UnityEngine.ImageConversionModule" HintPath="$(GameManaged)/UnityEngine.ImageConversionModule.dll" Private="false" />
+    <Reference Include="Newtonsoft.Json" HintPath="$(GameManaged)/Newtonsoft.Json.dll" Private="false" />
+    <!-- the game's own types: GroundObject, DroneObjectCollider, DrawingBoardFloorCreator, … -->
+    <Reference Include="Assembly-CSharp" HintPath="$(GameManaged)/Assembly-CSharp.dll" Private="false" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,3 @@
+meshoptimizer>=0.2.30a0
+numpy
+pillow

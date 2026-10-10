@@ -13,11 +13,13 @@ namespace LiftoffImport
     {
         public const string Id = "is.0s.liftoff-import";
         public const string Name = "Liftoff Import";
-        public const string Version = "0.1.1";
+        public const string Version = "0.2.0";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> DumpKey;
+        internal static ConfigEntry<KeyboardShortcut> ShadingKey;
         internal static Probe Probe;
+        internal static MapLoader Map;
 
         private void Awake()
         {
@@ -25,6 +27,13 @@ namespace LiftoffImport
             DumpKey = Config.Bind("Probe", "DumpKey", new KeyboardShortcut(KeyCode.F8),
                 "Write a hierarchy dump of the loaded scenes to BepInEx/LiftoffImport/");
             Probe = new Probe(Paths.BepInExRootPath);
+            var mapFile = Config.Bind("Map", "File", "maps/pirita/pirita_full.lmap",
+                "Map loaded into The Drawing Board, relative to this plugin's folder (or absolute)");
+            var emissive = Config.Bind("Map", "Emissive", false,
+                "Show the scan's texture as captured instead of lit by the level's sun");
+            ShadingKey = Config.Bind("Map", "ShadingKey", new KeyboardShortcut(KeyCode.F9),
+                "Switch between lit and emissive shading");
+            Map = new MapLoader(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Info.Location), mapFile.Value), emissive.Value);
 
             Log.LogInfo($"{Name} {Version} loaded: Unity {Application.unityVersion}, game {Application.version}");
             Guard("environment", Probe.LogEnvironment);
@@ -38,7 +47,12 @@ namespace LiftoffImport
         // the game's own handlers, and the game uploads unhandled ones as crash reports.
         private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            Guard("scene loaded", () => Runner.Ensure().StartCoroutine(Runner.Safe("scene probe", Probe.OnSceneLoaded(scene, mode))));
+            Guard("scene loaded", () =>
+            {
+                var runner = Runner.Ensure();
+                runner.StartCoroutine(Runner.Safe("scene probe", Probe.OnSceneLoaded(scene, mode)));
+                runner.StartCoroutine(Runner.Safe("map", Map.OnSceneLoaded(scene)));
+            });
         }
 
         internal static void Guard(string what, Action action)
@@ -76,6 +90,10 @@ namespace LiftoffImport
             if (Plugin.DumpKey.Value.IsDown())
             {
                 Plugin.Guard("dump", Plugin.Probe.Dump);
+            }
+            if (Plugin.ShadingKey.Value.IsDown())
+            {
+                Plugin.Guard("shading", Plugin.Map.ToggleShading);
             }
         }
 
