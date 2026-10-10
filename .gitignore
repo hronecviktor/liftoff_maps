@@ -1,0 +1,11 @@
+# Game files and anything derived from them: never commit
+game/
+decompiled/
+
+# Large source data (photogrammetry exports)
+data/
+
+# Build output
+bin/
+obj/
+dist/
