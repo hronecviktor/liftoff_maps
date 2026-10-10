@@ -71,8 +71,8 @@ def read_obj(path):
 
 def to_unity(v, centre_xy, ground):
     """RealityScan local (x, y, z up, right-handed) to Unity (x, y up, z,
-    left-handed). Swapping y and z mirrors the space, which also turns the
-    OBJ's counter-clockwise front faces into Unity's clockwise ones."""
+    left-handed) by swapping y and z. Triangles need their winding reversed
+    as well (see main), or Unity sees every face from the back."""
     out = np.empty_like(v, dtype=np.float32)
     out[:, 0] = v[:, 0] - centre_xy[0]
     out[:, 1] = v[:, 2] - ground
@@ -123,8 +123,9 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
 
     v, vt, faces = read_obj(args.obj)
-    vi = faces[:, 0::2]  # position index per corner
-    ti = faces[:, 1::2]  # UV index per corner
+    # position and UV index per corner, winding reversed for Unity's front faces
+    vi = faces[:, 0::2][:, ::-1]
+    ti = faces[:, 1::2][:, ::-1]
 
     lo, hi = v.min(0), v.max(0)
     centre = (lo[:2] + hi[:2]) / 2
