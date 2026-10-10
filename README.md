@@ -8,6 +8,10 @@ into the game.
 Unofficial and single-player only: keep the mod out of multiplayer. Game files,
 decompiled code and source scans stay out of git (see `.gitignore`).
 
+The game notices the mod: its anti-cheat logs `Custom code injection detected:
+BepInEx.Preloader` at startup, and it uploads unhandled exceptions as crash
+reports to the developer. The plugin therefore never lets an exception escape.
+
 ## Status
 
 1. **Loader check (now):** BepInEx plus a read-only probe that logs what the

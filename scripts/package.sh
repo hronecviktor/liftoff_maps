@@ -23,4 +23,5 @@ mkdir -p dist/overlay/BepInEx/plugins/LiftoffImport
 python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall('dist/overlay')" "$ZIP"
 chmod +x dist/overlay/run_bepinex.sh
 cp mod/LiftoffImport/bin/Release/net472/LiftoffImport.dll dist/overlay/BepInEx/plugins/LiftoffImport/
+cp -r mod/overlay/. dist/overlay/
 echo "dist/overlay ready"
