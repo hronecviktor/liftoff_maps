@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -6,15 +7,17 @@ using UnityEngine.SceneManagement;
 namespace LiftoffImport
 {
     /// <summary>
-    /// Puts the map into The Drawing Board: the grid floor and its labels move
-    /// below the scan, the scan's chunks are added with colliders that behave
-    /// like the level's own floor. The drone spawns at the origin, which the
-    /// converter places on the scan's surface.
+    /// Puts the map into The Drawing Board: the scan's chunks with colliders
+    /// that behave like the level's own floor, the grid floor and its labels
+    /// moved below the scan, and the drone's start point raised onto the scan's
+    /// surface at the origin.
     /// </summary>
     internal class MapLoader
     {
         // the grid sits a little below the scan's ground so it doesn't show through
         private const float FloorClearance = 0.5f;
+        // the drone starts this far above the scan's collision surface
+        private const float SpawnClearance = 0.15f;
 
         private readonly string mapPath;
         private MapFile map;
@@ -28,49 +31,20 @@ namespace LiftoffImport
             this.emissive = emissive;
         }
 
-        public IEnumerator OnSceneLoaded(Scene scene)
+        /// <summary>
+        /// Runs from sceneLoaded, before the level's Start() calls spawn the
+        /// drone, so the drone appears on the scan instead of inside it.
+        /// Returns the follow-up to run after Start(), or null.
+        /// </summary>
+        public IEnumerator Install(Scene scene)
         {
-            // wait for the level's own Start() calls (the floor builds its tiles there)
-            yield return null;
-            yield return new WaitForEndOfFrame();
-            var floor = scene.isLoaded ? FindRoot<DrawingBoardFloorCreator>(scene) : null;
-            if (floor == null)
+            var floor = FindRoot<DrawingBoardFloorCreator>(scene);
+            if (floor == null || !EnsureLoaded())
             {
-                yield break;
+                return null;
             }
-            if (map == null && !failed)
-            {
-                if (!File.Exists(mapPath))
-                {
-                    Plugin.Log.LogWarning($"no map at {mapPath}; The Drawing Board stays as it is");
-                    failed = true;
-                    yield break;
-                }
-                var watch = System.Diagnostics.Stopwatch.StartNew();
-                try
-                {
-                    map = MapFile.Load(mapPath);
-                }
-                catch (System.Exception e)
-                {
-                    failed = true;
-                    Plugin.Log.LogError($"loading {mapPath}: {e}");
-                    yield break;
-                }
-                Plugin.Log.LogInfo($"loaded map '{map.Name}' ({map.Chunks.Length} chunks, bounds {map.Bounds}) in {watch.ElapsedMilliseconds} ms");
-            }
-            if (map == null)
-            {
-                yield break;
-            }
-            Install(scene, floor);
-        }
-
-        private void Install(Scene scene, DrawingBoardFloorCreator floor)
-        {
             var floorY = map.Floor - FloorClearance;
-            floor.transform.position = new Vector3(0, floorY, 0);
-            // the floor's collider is a separate object marked as ground
+            // the floor's collider is a separate root object marked as ground
             var ground = FindRoot<GroundObject>(scene);
             if (ground != null)
             {
@@ -81,6 +55,7 @@ namespace LiftoffImport
 
             var root = new GameObject($"LiftoffImport {map.Name}");
             SceneManager.MoveGameObjectToScene(root, scene);
+            var colliders = new List<Collider>();
             foreach (var chunk in map.Chunks)
             {
                 var visual = new GameObject(chunk.Name);
@@ -93,13 +68,106 @@ namespace LiftoffImport
 
                 var solid = new GameObject(chunk.Name + " collision");
                 solid.transform.SetParent(root.transform, false);
-                solid.AddComponent<MeshCollider>().sharedMesh = chunk.Collision;
+                var meshCollider = solid.AddComponent<MeshCollider>();
+                meshCollider.sharedMesh = chunk.Collision;
+                colliders.Add(meshCollider);
                 solid.AddComponent<GroundObject>();
-                var hit = solid.AddComponent<DroneObjectCollider>();
-                hit.collisionMaterial = collisionMaterial;
+                solid.AddComponent<DroneObjectCollider>().collisionMaterial = collisionMaterial;
+            }
+
+            var start = FindRoot<DroneSpawnPoint>(scene);
+            var spawnY = float.NaN;
+            if (start != null)
+            {
+                spawnY = SurfaceBelow(colliders, start.transform.position) + SpawnClearance;
+                if (!float.IsNaN(spawnY))
+                {
+                    var p = start.transform.position;
+                    start.transform.position = new Vector3(p.x, spawnY, p.z);
+                }
             }
             Plugin.Log.LogInfo($"installed '{map.Name}' in The Drawing Board; grid floor at {floorY:F2} m, " +
+                               $"start point at {(start != null ? start.transform.position.ToString("F2") : "(not found)")}, " +
                                $"crash material {(collisionMaterial != null ? collisionMaterial.name : "none")}");
+            return AfterStart(scene, floor, floorY, start);
+        }
+
+        private IEnumerator AfterStart(Scene scene, DrawingBoardFloorCreator floor, float floorY, DroneSpawnPoint start)
+        {
+            // the floor builds its tiles in Start(), at world height 0
+            yield return null;
+            if (!scene.isLoaded)
+            {
+                yield break;
+            }
+            floor.transform.position = new Vector3(0, floorY, 0);
+
+            // a drone that already stood at the old start point is inside the scan now
+            if (start == null)
+            {
+                yield break;
+            }
+            var target = start.transform.position;
+            foreach (var root in scene.GetRootGameObjects())
+            {
+                var body = root.GetComponent<Rigidbody>();
+                if (body == null || root.layer != LayerMask.NameToLayer("Drone"))
+                {
+                    continue;
+                }
+                var was = body.position;
+                var offset = was - target;
+                if (new Vector2(offset.x, offset.z).magnitude < 2f && offset.y < 0f)
+                {
+                    body.position = target;
+                    body.velocity = Vector3.zero;
+                    body.angularVelocity = Vector3.zero;
+                    Plugin.Log.LogInfo($"moved drone '{root.name}' from {was:F2} onto the start point");
+                }
+            }
+        }
+
+        private bool EnsureLoaded()
+        {
+            if (map != null || failed)
+            {
+                return map != null;
+            }
+            if (!File.Exists(mapPath))
+            {
+                Plugin.Log.LogWarning($"no map at {mapPath}; The Drawing Board stays as it is");
+                failed = true;
+                return false;
+            }
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                map = MapFile.Load(mapPath);
+            }
+            catch (System.Exception e)
+            {
+                failed = true;
+                Plugin.Log.LogError($"loading {mapPath}: {e}");
+                return false;
+            }
+            Plugin.Log.LogInfo($"loaded map '{map.Name}' ({map.Chunks.Length} chunks, bounds {map.Bounds}) in {watch.ElapsedMilliseconds} ms");
+            return true;
+        }
+
+        /// <summary>Highest point of the scan's collision surface below (and around) a point.</summary>
+        private static float SurfaceBelow(List<Collider> colliders, Vector3 point)
+        {
+            Physics.SyncTransforms(); // new colliders are not raycastable before the next physics step
+            var from = new Vector3(point.x, 1000f, point.z);
+            var best = float.NaN;
+            foreach (var c in colliders)
+            {
+                if (c.Raycast(new Ray(from, Vector3.down), out var hit, 2000f) && !(hit.point.y <= best))
+                {
+                    best = hit.point.y;
+                }
+            }
+            return best;
         }
 
         /// <summary>Switches between lit (default) and emissive shading of the scan.</summary>

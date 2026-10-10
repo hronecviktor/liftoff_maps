@@ -13,7 +13,7 @@ namespace LiftoffImport
     {
         public const string Id = "is.0s.liftoff-import";
         public const string Name = "Liftoff Import";
-        public const string Version = "0.2.0";
+        public const string Version = "0.2.1";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> DumpKey;
@@ -51,7 +51,12 @@ namespace LiftoffImport
             {
                 var runner = Runner.Ensure();
                 runner.StartCoroutine(Runner.Safe("scene probe", Probe.OnSceneLoaded(scene, mode)));
-                runner.StartCoroutine(Runner.Safe("map", Map.OnSceneLoaded(scene)));
+                // synchronously: the level spawns the drone in its Start() calls
+                var afterStart = Map.Install(scene);
+                if (afterStart != null)
+                {
+                    runner.StartCoroutine(Runner.Safe("map", afterStart));
+                }
             });
         }
 
