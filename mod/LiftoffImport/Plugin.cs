@@ -13,7 +13,7 @@ namespace LiftoffImport
     {
         public const string Id = "is.0s.liftoff-import";
         public const string Name = "Liftoff Import";
-        public const string Version = "0.2.1";
+        public const string Version = "0.3.0";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> DumpKey;
@@ -27,13 +27,14 @@ namespace LiftoffImport
             DumpKey = Config.Bind("Probe", "DumpKey", new KeyboardShortcut(KeyCode.F8),
                 "Write a hierarchy dump of the loaded scenes to BepInEx/LiftoffImport/");
             Probe = new Probe(Paths.BepInExRootPath);
-            var mapFile = Config.Bind("Map", "File", "maps/pirita/pirita_full.lmap",
-                "Map loaded into The Drawing Board, relative to this plugin's folder (or absolute)");
+            var mapFile = Config.Bind("Map", "File", "",
+                "Map loaded into The Drawing Board: an .lmap path, relative to this plugin's folder or absolute. " +
+                "Empty: the first .lmap found under the plugin's maps/ folder.");
             var emissive = Config.Bind("Map", "Emissive", false,
                 "Show the scan's texture as captured instead of lit by the level's sun");
             ShadingKey = Config.Bind("Map", "ShadingKey", new KeyboardShortcut(KeyCode.F9),
                 "Switch between lit and emissive shading");
-            Map = new MapLoader(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Info.Location), mapFile.Value), emissive.Value);
+            Map = new MapLoader(System.IO.Path.GetDirectoryName(Info.Location), mapFile.Value, emissive.Value);
 
             Log.LogInfo($"{Name} {Version} loaded: Unity {Application.unityVersion}, game {Application.version}");
             Guard("environment", Probe.LogEnvironment);

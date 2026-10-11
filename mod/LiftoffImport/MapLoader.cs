@@ -19,15 +19,17 @@ namespace LiftoffImport
         // the drone starts this far above the scan's collision surface
         private const float SpawnClearance = 0.15f;
 
-        private readonly string mapPath;
+        private readonly string pluginDir;
+        private readonly string configuredFile;
         private MapFile map;
         private bool failed;
         private Material material;
         private bool emissive;
 
-        public MapLoader(string mapPath, bool emissive)
+        public MapLoader(string pluginDir, string configuredFile, bool emissive)
         {
-            this.mapPath = mapPath;
+            this.pluginDir = pluginDir;
+            this.configuredFile = configuredFile;
             this.emissive = emissive;
         }
 
@@ -133,9 +135,9 @@ namespace LiftoffImport
             {
                 return map != null;
             }
-            if (!File.Exists(mapPath))
+            var mapPath = ResolveMapPath();
+            if (mapPath == null)
             {
-                Plugin.Log.LogWarning($"no map at {mapPath}; The Drawing Board stays as it is");
                 failed = true;
                 return false;
             }
@@ -152,6 +154,33 @@ namespace LiftoffImport
             }
             Plugin.Log.LogInfo($"loaded map '{map.Name}' ({map.Chunks.Length} chunks, bounds {map.Bounds}) in {watch.ElapsedMilliseconds} ms");
             return true;
+        }
+
+        private string ResolveMapPath()
+        {
+            if (!string.IsNullOrWhiteSpace(configuredFile))
+            {
+                var path = Path.Combine(pluginDir, configuredFile.Trim());
+                if (File.Exists(path))
+                {
+                    return path;
+                }
+                Plugin.Log.LogWarning($"configured map {path} not found; The Drawing Board stays as it is");
+                return null;
+            }
+            var maps = Path.Combine(pluginDir, "maps");
+            var found = Directory.Exists(maps) ? Directory.GetFiles(maps, "*.lmap", SearchOption.AllDirectories) : new string[0];
+            System.Array.Sort(found, System.StringComparer.Ordinal);
+            if (found.Length == 0)
+            {
+                Plugin.Log.LogWarning($"no .lmap file under {maps}; The Drawing Board stays as it is");
+                return null;
+            }
+            if (found.Length > 1)
+            {
+                Plugin.Log.LogInfo($"{found.Length} maps found, using the first; set [Map] File to pick another: {string.Join(", ", found)}");
+            }
+            return found[0];
         }
 
         /// <summary>Highest point of the scan's collision surface below (and around) a point.</summary>
