@@ -9,3 +9,8 @@ data/
 bin/
 obj/
 dist/
+
+# Local recordings and notes
+Screencast*
+Screenshot*
+game-info.txt
