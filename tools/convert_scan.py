@@ -52,8 +52,20 @@ def read_obj(path):
             pos = stop
             v.append(np.fromstring(b" ".join(l[2:] for l in lines if l.startswith(b"v ")), dtype=np.float64, sep=" "))
             vt.append(np.fromstring(b" ".join(l[3:] for l in lines if l.startswith(b"vt ")), dtype=np.float32, sep=" "))
-            fs = b" ".join(l[2:] for l in lines if l.startswith(b"f ")).replace(b"/", b" ")
-            faces.append(np.fromstring(fs, dtype=np.int64, sep=" "))
+            flines = [l[2:] for l in lines if l.startswith(b"f ")]
+            fs = b" ".join(flines)
+            # triangles with position/UV (and optionally normal) per corner
+            per = fs.count(b"/") / max(1, len(flines))
+            if per not in (3, 6) or b"//" in fs:
+                sys.exit("faces must be triangles with texture coordinates (f v/vt v/vt v/vt or "
+                         "f v/vt/vn …); re-export triangulated, with UVs")
+            ints = np.fromstring(fs.replace(b"/", b" "), dtype=np.int64, sep=" ")
+            cols = 6 if per == 3 else 9
+            if ints.size != cols * len(flines):
+                sys.exit("faces must be triangles; re-export triangulated")
+            if cols == 9:
+                ints = ints.reshape(-1, 3, 3)[:, :, :2].reshape(-1)  # drop normal indices
+            faces.append(ints)
             materials.update(l[7:].strip() for l in lines if l.startswith(b"usemtl "))
             log(f"  read {pos / len(mm):.0%}")
         mm.close()
@@ -61,10 +73,9 @@ def read_obj(path):
         sys.exit(f"{len(materials)} materials; only single-texture scans are supported")
     v = np.concatenate(v).reshape(-1, 6)[:, :3]  # x y z r g b
     vt = np.concatenate(vt).reshape(-1, 2)
-    faces = np.concatenate(faces)
-    if faces.size % 6:
-        sys.exit("faces must be triangles with position/UV indices (f a/b c/d e/f)")
-    faces = faces.reshape(-1, 6)
+    faces = np.concatenate(faces).reshape(-1, 6)
+    if not len(faces) or not len(vt):
+        sys.exit("no textured triangles found")
     log(f"{len(v):,} vertices, {len(vt):,} UVs, {len(faces):,} triangles")
     return v, vt, faces - 1  # OBJ indices are 1-based
 
@@ -106,6 +117,8 @@ def main():
     ap.add_argument("out_dir")
     ap.add_argument("--name", help="map name (default: OBJ file name)")
     ap.add_argument("--texture", help="texture image (default: from the .mtl)")
+    ap.add_argument("--up", choices=("z", "y"), default="z",
+                    help="the scan's up axis: z (RealityScan, Metashape) or y (Blender's default OBJ export, Polycam)")
     ap.add_argument("--chunk", type=float, default=25.0, help="chunk size in metres")
     ap.add_argument("--render-ratio", type=float, default=0.12, help="fraction of triangles kept for rendering")
     ap.add_argument("--collision-ratio", type=float, default=0.02, help="fraction kept for collisions")
@@ -123,6 +136,9 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
 
     v, vt, faces = read_obj(args.obj)
+    if args.up == "y":
+        # rotate Y-up to Z-up (a rotation, so handedness and winding stay as they are)
+        v = np.stack([v[:, 0], -v[:, 2], v[:, 1]], axis=1)
     # position and UV index per corner, winding reversed for Unity's front faces
     vi = faces[:, 0::2][:, ::-1]
     ti = faces[:, 1::2][:, ::-1]
